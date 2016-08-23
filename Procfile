@@ -1,1 +1,1 @@
-web: gunicorn pyverr.wsgi --log--file -
+web: gunicorn pyverr.wsgi --log-file -
