@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 
-from .models import Gig, Profile, Purchase
+from .models import Gig, Profile, Purchase, Review
 from .forms import GigForm
 
 import braintree
@@ -17,13 +17,26 @@ def home(request):
     return render(request, 'home.html', {"gigs": gigs})
 
 def gig_detail(request, id):
+    if request.method == 'POST' and \
+        not request.user.is_anonymous() and \
+        Purchase.objects.filter(gig_id=id, buyer=request.user).count() > 0 and \
+        'content' in request.POST and \
+        request.POST['content'].strip() != '':
+        Review.objects.create(content=request.POST['content'], gig_id=id, user=request.user)
     try:
         gig = Gig.objects.get(id=id)
     except Gig.DoesNotExist:
         return redirect('/')
 
+    if request.user.is_anonymous() or \
+        Purchase.objects.filter(gig=gig, buyer=request.user).count() == 0 or \
+        Review.objects.filter(gig=gig, user=request.user).count() > 0:
+        show_post_review = False
+    else:
+        show_post_review = Purchase.objects.filter(gig=gig, buyer=request.user).count() > 0
+    reviews = Review.objects.filter(gig=gig)
     client_token = braintree.ClientToken.generate()
-    return render(request, 'gig_detail.html', {"gig": gig, "client_token": client_token})
+    return render(request, 'gig_detail.html', {"gig": gig, "client_token": client_token, "reviews": reviews, "show_post_review": show_post_review})
 
 @login_required(login_url="/")
 def create_gig(request):
@@ -106,3 +119,21 @@ def my_sellings(request):
 def my_buyings(request):
     purchases = Purchase.objects.filter(buyer=request.user)
     return render(request, 'my_buyings.html', {"purchases": purchases})
+
+def category(request, link):
+    categories = {
+        "graphics-design": "GD",
+        "digital-marketing": "DM",
+        "video-animation": "VA",
+        "music-audio": "MA",
+        "programming-tech": "PT"
+    }
+    try:
+        gigs = Gig.objects.filter(category=categories[link])
+        return render(request, 'home.html', {"gigs": gigs})
+    except KeyError:
+        return redirect('home')
+
+def search(request):
+    gigs = Gig.objects.filter(title__contains=request.GET['title'])
+    return render(request, 'home.html', {"gigs": gigs})
